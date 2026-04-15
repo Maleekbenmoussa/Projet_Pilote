@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test IA — CV (hors app React)</title>
+    <style>
+      :root {
+        --bg: #e9f2f2;
+        --black: #111;
+        --mint: #a5d6a7;
+        --yellow: #f9e98e;
+        --border: #e0e0e0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--black);
+        padding: 24px;
+      }
+      .wrap {
+        max-width: 560px;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 8px;
+      }
+      .hint {
+        font-size: 0.85rem;
+        color: #4f4f4f;
+        margin-bottom: 20px;
+      }
+      label {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      input[type='email'],
+      input[type='password'],
+      input[type='file'] {
+        width: 100%;
+        margin-bottom: 14px;
+      }
+      input[type='email'],
+      input[type='password'] {
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+      }
+      button {
+        width: 100%;
+        padding: 12px;
+        border: none;
+        border-radius: 999px;
+        background: var(--black);
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+        margin-top: 8px;
+      }
+      button:hover {
+        opacity: 0.92;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      pre {
+        margin-top: 20px;
+        padding: 16px;
+        background: #f6f6f6;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .ok {
+        color: #1b5e20;
+      }
+      .err {
+        color: #b71c1c;
+      }
+      .badge {
+        display: inline-block;
+        background: var(--mint);
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <span class="badge">Fichier isolé — pas le router React</span>
+      <h1>Test upload CV + score IA</h1>
+      <p class="hint">
+        Lance le backend (<code>npm run dev</code> dans <code>backend</code>) et FastAPI (<code>uvicorn</code> port 8000).
+        Puis ouvre cette page via le serveur Vite : <strong>http://localhost:5173/project-ai-cv.html</strong>
+      </p>
+
+      <form id="form">
+        <label>Email candidat (compte seed)</label>
+        <input type="email" id="email" value="candidate@tanit.demo" autocomplete="username" />
+
+        <label>Mot de passe</label>
+        <input type="password" id="password" value="password123" autocomplete="current-password" />
+
+        <label>Fichier PDF (max 5 Mo)</label>
+        <input type="file" id="file" accept="application/pdf" required />
+
+        <button type="submit" id="btn">Connexion + envoi CV à l’IA</button>
+      </form>
+
+      <pre id="out" hidden></pre>
+    </div>
+
+    <script>
+      const API = '' // même origine que Vite → proxy vers :3001
+
+      const out = document.getElementById('out')
+      const btn = document.getElementById('btn')
+
+      function show(text, isError) {
+        out.hidden = false
+        out.className = isError ? 'err' : 'ok'
+        out.textContent = text
+      }
+
+      document.getElementById('form').addEventListener('submit', async (e) => {
+        e.preventDefault()
+        btn.disabled = true
+        out.hidden = true
+
+        const email = document.getElementById('email').value.trim()
+        const password = document.getElementById('password').value
+        const file = document.getElementById('file').files[0]
+
+        if (!file) {
+          show('Choisis un fichier PDF.', true)
+          btn.disabled = false
+          return
+        }
+
+        try {
+          const loginRes = await fetch(API + '/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, password }),
+          })
+
+          if (!loginRes.ok) {
+            const err = await loginRes.json().catch(() => ({}))
+            throw new Error(err.error || loginRes.statusText + ' (login)')
+          }
+
+          const fd = new FormData()
+          fd.append('file', file)
+
+          const upRes = await fetch(API + '/api/cv/upload', {
+            method: 'POST',
+            credentials: 'include',
+            body: fd,
+          })
+
+          const data = await upRes.json().catch(() => ({}))
+          if (!upRes.ok) {
+            throw new Error(data.error || upRes.statusText + ' (upload)')
+          }
+
+          show(
+            'Réponse backend (après extraction PDF + appel FastAPI /score si disponible) :\n\n' + JSON.stringify(data, null, 2),
+            false,
+          )
+        } catch (err) {
+          show(String(err.message || err), true)
+        } finally {
+          btn.disabled = false
+        }
+      })
+    </script>
+  </body>
+</html>
