@@ -1,51 +1,81 @@
-name: CI
+name: CI — Tests et Build
 
 on:
   push:
-    branches: [main, master]
+    branches: [ main, develop ]
   pull_request:
+    branches: [ main ]
 
 jobs:
-  backend:
+
+  test-backend:
+    name: Tests Backend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tanit
+          POSTGRES_PASSWORD: tanit
+          POSTGRES_DB: tanit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
+          cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      - run: npm ci
-      - run: npx prisma validate
-      - run: npm run build
+      - name: Installer les dépendances
+        working-directory: ./backend
+        run: npm ci
+      - name: Appliquer les migrations Prisma
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql://tanit:tanit@localhost:5432/tanit_test
+        run: npx prisma migrate deploy
+      - name: Lancer les tests
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql://tanit:tanit@localhost:5432/tanit_test
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          PORT: 5000
+          NODE_ENV: test
+        run: npm test
 
-  frontend:
+  build-backend:
+    name: Build et Push Backend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
+    needs: test-backend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: docker/login-action@v3
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run build
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tanit-backend:latest
 
-  ai-service:
+  build-frontend:
+    name: Build et Push Frontend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ai-service
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: docker/login-action@v3
         with:
-          python-version: '3.12'
-      - run: pip install -r requirements.txt
-      - run: python -c "import main; print('ok')"
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/tanit-frontend:latest

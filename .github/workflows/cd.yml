@@ -1,0 +1,32 @@
+name: CD — Déploiement sur Render
+
+on:
+  workflow_run:
+    workflows: ['CI — Tests et Build']
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Déployer sur Render
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Déployer le backend
+        run: |
+          curl -X POST \
+            'https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys' \
+            -H 'Authorization: Bearer ${{ secrets.RENDER_API_KEY }}' \
+            -H 'Content-Type: application/json' \
+            -d '{"clearCache": false}'
+      - name: Attendre 30 secondes
+        run: sleep 30
+      - name: Déployer le frontend
+        run: |
+          curl -X POST \
+            'https://api.render.com/v1/services/${{ secrets.RENDER_FRONTEND_SERVICE_ID }}/deploys' \
+            -H 'Authorization: Bearer ${{ secrets.RENDER_API_KEY }}' \
+            -H 'Content-Type: application/json' \
+            -d '{"clearCache": false}'
+      - name: Confirmation
+        run: echo "Déploiement lancé avec succès !"
