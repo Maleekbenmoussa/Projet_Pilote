@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+ai-service/.env
+uploads/
+*.log
+.DS_Store
+coverage/
